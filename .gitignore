@@ -1,0 +1,7 @@
+trained_models/
+data/
+CMDs
+scripts/
+
+!scripts/submit_train.sh
+!scripts/train.sh
