@@ -41,7 +41,7 @@ class QaBatcher:
             # if ids larger than max size, then truncate
             max_opt_len = max([len(opt_ids) for opt_ids in ex.input_ids])
             if self.max_len and (max_opt_len>self.max_len): 
-                input_ids = [opt_ids[-self.max_len:] for opt_ids in ex.input_ids]
+                input_ids = [[opt_ids[0]] + opt_ids[-self.max_len+1:] for opt_ids in ex.input_ids]
             
             prepped_examples.append([ex_id, input_ids, label])
         return prepped_examples

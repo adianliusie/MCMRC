@@ -2,6 +2,7 @@ import wandb
 import numpy as np
 import torch
 import pickle
+import random
 
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -11,7 +12,7 @@ from types import SimpleNamespace
 from typing import List, Tuple
 from torch.nn import DataParallel
     
-from ..data_utils.data_loader import DataLoader
+from ..data_utils.data_loader import QaDataLoader
 from ..batchers.QA_batcher import QaBatcher
 from ..utils.dir_helper import DirHelper
 from ..utils.torch_utils import no_grad, load_MC_transformer
@@ -27,25 +28,26 @@ class Trainer():
     #== MAIN TRAIN LOOP ==============================================================#
     
     def set_up_helpers(self, m_args:namedtuple):
+        seed = random.randint(0, 10000)
+        setattr(m_args, 'seed', seed)
+        random.seed(seed)
         self.model_args = m_args
-        self.data_loader = DataLoader(trans_name=m_args.transformer, 
-                                      formatting=m_args.formatting)
+        self.data_loader = QaDataLoader(trans_name=m_args.transformer, 
+                                        formatting=m_args.formatting)
         self.batcher = QaBatcher(max_len=m_args.max_len)
         self.model = load_MC_transformer(system=m_args.transformer)
-                 
+        print(f'System loaded with random seed {seed}')
+
     def train(self, args:namedtuple):
         self.dir.save_args('train_args.json', args)
         if args.wandb: self.set_up_wandb(args)
  
         train, dev, test = self.data_loader.prep_MCRC_data(args.data_set, args.lim)
-        
         optimizer = torch.optim.AdamW(self.model.parameters(), 
                                       lr=args.lr, eps=args.epsilon)
-        best_epoch = (-1, 10000)
+        best_epoch = (-1, 10000, 0)
         self.device = args.device
         self.to(self.device)
-        #temp
-        import time; time.sleep(5)
         
         for epoch in range(args.epochs):
             #==  TRAINING ==============================================#
@@ -81,8 +83,8 @@ class Trainer():
             test_perf = self.system_eval(test, epoch, mode='test')
             
             # save performance if best dev performance 
-            if perf.loss < best_epoch[1]:
-                best_epoch = (epoch, perf.loss)
+            if perf.acc > best_epoch[2]:
+                best_epoch = (epoch, perf.loss, perf.acc)
                 if args.save: self.save_model()
                 else: self.generate_probs(data=test, data_name=args.data_set)
                 
@@ -107,7 +109,7 @@ class Trainer():
         return SimpleNamespace(loss=loss, logits=logits, 
                                hits=hits, num_preds=num_preds)
 
-    ############# EVAL METHODS ####################################
+    #== EVAL METHODS ================================================================#
     @no_grad
     def system_eval(self, data, epoch:int, mode='dev'):
         self.dir.reset_metrics()         
@@ -142,7 +144,7 @@ class Trainer():
             probabilties[ex_id] = y.cpu().numpy()
         return probabilties
     
-    #############  MODEL UTILS  ###################################
+    #== MODEL UTILS  ================================================================#
     
     def save_model(self, name:str='base'):
         device = next(self.model.parameters()).device
@@ -160,7 +162,7 @@ class Trainer():
         self.model.to(device)
         self.batcher.to(device)
 
-    ############  WANDB UTILS  ####################################
+    #==  WANDB UTILS  ===============================================================#
     
     def set_up_wandb(self, args:namedtuple):
         wandb.init(project=args.wandb, entity="adian",
