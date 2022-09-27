@@ -1,0 +1,147 @@
+import wandb
+import numpy as np
+import torch
+import pickle
+import random
+
+import torch.nn.functional as F
+import matplotlib.pyplot as plt
+
+from collections import namedtuple
+from types import SimpleNamespace
+from typing import List, Tuple
+from torch.nn import DataParallel
+    
+from ..data_utils.data_loader import QgDataLoader
+from ..batchers.QA_batcher import QgBatcher
+from ..utils.dir_helper import DirHelper
+from ..utils.torch_utils import no_grad, load_seq2seq_transformer
+
+class QgTrainer():
+    """"base class for running basic transformer classification models"""
+    
+    def __init__(self, exp_name:str, m_args:namedtuple):
+        self.dir = DirHelper(exp_name)
+        self.dir.save_args('model_args.json', m_args)
+        self.set_up_helpers(m_args)
+        
+    #== MAIN TRAIN LOOP ==============================================================#
+    
+    def set_up_helpers(self, m_args:namedtuple):
+        seed = random.randint(0, 10000)
+        setattr(m_args, 'seed', seed)
+        random.seed(seed)
+        self.model_args = m_args
+        self.data_loader = QgDataLoader(trans_name=m_args.transformer, 
+                                        formatting=m_args.formatting)
+        self.batcher = QgBatcher(max_len=m_args.max_len)
+        self.model = load_seq2seq_transformer(system=m_args.transformer)
+        print(f'System loaded with random seed {seed}')
+
+    def train(self, args:namedtuple):
+        self.dir.save_args('train_args.json', args)
+        if args.wandb: self.set_up_wandb(args)
+ 
+        train, dev, test = self.data_loader.prep_QG_data(args.data_set, args.lim)
+        optimizer = torch.optim.AdamW(self.model.parameters(), 
+                                      lr=args.lr, eps=args.epsilon)
+        best_epoch = (-1, 10000)
+        self.device = args.device
+        self.to(self.device)
+        
+        for epoch in range(args.epochs):
+            #==  TRAINING ==============================================#
+            self.model.train()
+            self.dir.reset_metrics()
+            train_b = self.batcher(data=train, bsz=args.bsz, shuffle=True)
+            
+            for k, batch in enumerate(train_b, start=1):
+                output = self.model_output(batch)
+
+                optimizer.zero_grad()
+                output.loss.backward()
+                optimizer.step()
+
+                # accuracy logging
+                self.dir.update_avg_metrics(loss=output.loss)
+                
+                # print train performance every now and then
+                if k%(args.print_len//args.bsz) == 0:
+                    perf = self.dir.print_perf('train', epoch, k)
+                    if args.wandb:
+                         wandb.log({'epoch':epoch, 'loss':perf.loss})
+            
+            #== DEV ==============================================#
+            self.model.eval()
+            perf = self.system_eval(dev, epoch, mode='dev')
+            if args.wandb:
+                wandb.log({'dev_loss':perf.loss})
+
+            #== TEST ==============================================#
+            test_perf = self.system_eval(test, epoch, mode='test')
+            
+            # save performance if best dev performance 
+            if perf.loss < best_epoch[1]:
+                best_epoch = (epoch, perf.loss)
+                if args.save: self.save_model()
+                else: self.generate_probs(data=test, data_name=args.data_set)
+                
+            if epoch - best_epoch[0] >= 3:
+                break
+             
+        self.dir.log(f'best dev epoch: {best_epoch}')
+    
+    def model_output(self, batch):
+        output = self.model(input_ids=batch.input_ids, 
+                            attention_mask=batch.attention_mask, 
+                            labels=batch.label_ids)
+        
+        loss = output.loss      
+        return SimpleNamespace(loss=loss)
+
+    #== EVAL METHODS ================================================================#
+    @no_grad
+    def system_eval(self, data, epoch:int, mode='dev'):
+        self.dir.reset_metrics()         
+        batches = self.batcher(data=data, bsz=1, shuffle=False)
+        for k, batch in enumerate(batches, start=1):
+            output = self.model_output(batch)
+            self.dir.update_avg_metrics(loss=output.loss)
+        perf = self.dir.print_perf(mode, epoch, 0)
+        return perf
+    
+    #== MODEL UTILS  ================================================================#
+    def save_model(self, name:str='base'):
+        device = next(self.model.parameters()).device
+        self.model.to("cpu")
+        torch.save(self.model.state_dict(), 
+                   f'{self.dir.abs_path}/models/{name}.pt')
+        self.model.to(device)
+
+    def load_model(self, name:str='base'):
+        self.model.load_state_dict(
+            torch.load(self.dir.abs_path + f'/models/{name}.pt'))
+
+    def to(self, device):
+        assert hasattr(self, 'model') and hasattr(self, 'batcher')
+        self.model.to(device)
+        self.batcher.to(device)
+
+    #==  WANDB UTILS  ===============================================================#
+    def set_up_wandb(self, args:namedtuple):
+        wandb.init(project=args.wandb, entity="adian",
+                   name=self.dir.exp_name, group=self.dir.base_name, 
+                   dir=self.dir.abs_path, reinit=True)
+
+        # save experiment config details
+        cfg = {}
+        cfg['epochs']      = args.epochs
+        cfg['bsz']         = args.bsz
+        cfg['lr']          = args.lr
+        cfg['transformer'] = self.model_args.transformer       
+        cfg['data_set']    = args.data_set
+
+        wandb.config.update(cfg) 
+        wandb.watch(self.model)
+        
+    

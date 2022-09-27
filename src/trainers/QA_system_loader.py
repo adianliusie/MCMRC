@@ -68,7 +68,7 @@ class SystemLoader(Trainer):
         return probabilties
     
     def load_labels(self, data_name:str, mode='test', lim=None)->dict:
-        eval_data = QaDataLoader.load_split(data_name, mode)
+        eval_data = QaDataLoader.load_split(data_name, mode, lim)
         labels_dict = {}
         for ex in eval_data:
             labels_dict[ex.ex_id] = ex.answer
@@ -84,6 +84,19 @@ class SystemLoader(Trainer):
     def get_eval_data(self, data_name:str, mode='test'):
         return self.data_loader.prep_MCRC_split(data_name, mode)
 
+    @staticmethod
+    def calc_accuracy(probs:dict, labels:dict):
+        assert probs.keys() == labels.keys(), "keys don't match"
+        perf = np.zeros(2)
+        
+        for sample_id, label in labels.items():
+            prob = probs[sample_id]
+            pred = int(np.argmax(prob, axis=-1)) 
+            perf[0] += np.sum(pred == label)
+            perf[1] += 1
+        acc = perf[0]/perf[1]
+        return 100*acc
+    
 class EnsembleLoader(SystemLoader):
     def __init__(self, exp_path:str):
         self.exp_path = exp_path

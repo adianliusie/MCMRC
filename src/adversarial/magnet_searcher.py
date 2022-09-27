@@ -8,48 +8,21 @@ from tqdm import tqdm
 from functools import lru_cache
 
 from ..trainers.QA_system_loader import SystemLoader
-from ..trainers.QG_system_loader import QgSystemLoader
-
 from ..utils.torch_utils import no_grad
 from ..data_utils.data_loader import QaDataLoader
 from ..batchers.QA_batcher import QaBatcher
-from ..utils.general import get_base_dir, join_paths
 
-class AdversarialOptionSearcher(SystemLoader):
+class MagnetSearcher(SystemLoader):
     def __init__(self, exp_path, device=None):
         super().__init__(exp_path)
         self.set_up_helpers(device)
         self.convert_dataloader()
             
     def convert_dataloader(self):
-        self.data_loader.__class__ = AdversarialOptionDataLoader
-    
-    @no_grad
-    def _probs(self, data_name:str, mode='test'):
-        """get imposter model predictions for given data"""
-        self.model.eval()
-        self.to(self.device)
+        self.data_loader.__class__ = MagnetDataLoader
         
-        #this code mimics the internals of dataloader
-        data = self.data_loader.load_split(data_name, mode, lim)
-        eval_data = ._prep_MCRC_ids(data)
-    
-        eval_data = self.data_loader.prep_MCRC_split(data_name, mode)
-        eval_batches = self.batcher(data=eval_data, bsz=1, shuffle=False)
-        
-        probabilties = {}
-        for batch in tqdm(eval_batches):
-            ex_id = batch.ex_id[0]
-            output = self.model_output(batch)
-
-            logits = output.logits.squeeze(0)
-            if logits.shape and logits.shape[-1] > 1:  # Get probabilities of predictions
-                prob = F.softmax(logits, dim=-1)
-            probabilties[ex_id] = prob.cpu().numpy()
-        return probabilties
-    
     @no_grad
-    def find_adversarial_options(self, data_name, lim=None ,num_adv=None):
+    def find_magnet_options(self, data_name, lim=None ,num_adv=None):
         prep_inputs, options, num_q = self.data_loader.find_magnet_options(data_name, lim, num_adv)
         
         matrix = np.zeros((num_q, len(options)+1))
@@ -62,11 +35,9 @@ class AdversarialOptionSearcher(SystemLoader):
             matrix[ex.q_num, ex.opt_num] = logit_score
         return matrix, options
         
-class AdversarialOptionDataLoader(QaDataLoader):
-    
-    #== Adversarial Magnet Options Search ====================================================================
+class MagnetDataLoader(QaDataLoader):
     def find_magnet_options(self, data_name, lim=None, num_adv=None):
-        """ Finds options which universally get selected by the system"""
+        """ Finds options that universally get selected by the system"""
         train, dev, test = self.load_data(data_name)
         dev = self.rand_select(dev, lim) 
         
@@ -97,24 +68,7 @@ class AdversarialOptionDataLoader(QaDataLoader):
                 input_ids = torch.LongTensor([ids])
                 ex = SimpleNamespace(q_num=q_num, opt_num=k, input_ids=input_ids)
                 yield ex
-
-    #== Adversarial Imposter Option Evaluation ====================================================================
-    default_path = '../../investigations/QG/trained_models' 
-    def load_imposter_data(self, data_name, imposter_path=default_path, split='test', lim=None):
-        imposter_system = QgSystemLoader(imposter_path)
-        imposter_system.to(device)
-
-        data = self.load_data_split(data_name, split)
-        random.seed(1)        
-
-        for ex in data:
-            #for each example replace a random option with the imposter option
-            imposter_option = imposter_system.generate_option(ex=ex)
-            rand_opt = random.choice([i for i in range(len(options)) if i != ex.answer])
-            ex.options[rand_opt] = imposter_option 
-        return data
-    
-    #== General util functions =================================================================================
+                
     def _prep_single_option(self, Q_ids:List[int], C_ids:List[int], O_ids:List[int]):
         if self.formatting == 'standard':
             ids = C_ids + Q_ids[1:-1] + O_ids[1:]

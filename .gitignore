@@ -2,6 +2,9 @@ trained_models/
 data/
 CMDs
 scripts/
+investigations/
+notebooks/
 
 !scripts/submit_train.sh
 !scripts/train.sh
+
