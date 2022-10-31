@@ -10,7 +10,13 @@ def probs_to_pred(probs:np.ndarray)->np.ndarray:
     return np.argmax(probs, axis=1)
 
 def get_hits(preds:np.ndarray, labels:np.ndarray):
-    return (preds == labels)
+    return preds == labels
+
+def calc_acc(probs:dict, labels:dict):
+    probs_np = convert_dict_np(probs)
+    preds_np = probs_to_pred(probs_np)
+    labels_np = convert_dict_np(labels)
+    return 100*sum(preds_np==labels_np)/len(labels_np)
 
 def calc_entropy(probs:np.ndarray)->np.ndarray:
     return stats.entropy(probs, base=2, axis=1)
@@ -75,6 +81,8 @@ def entropy_plot(probs:dict, labels:dict, ax1, ax2, color='blue', calibrate=Fals
     preds = probs_to_pred(probs)
     hits = get_hits(preds, labels)
 
+    print(preds, '\n\n')
+    print(labels)
     if calibrate: probs = anneal_probs(probs, labels)
     entropies = calc_entropy(probs)
     eff_num_opt = 2**entropies
@@ -161,4 +169,4 @@ def mut_info_count_plot(probs:dict, probs_sh:dict, ax, color='blue'):
     hist, bin_edges = np.histogram(mut_info)
     bin_centres   = np.array(bin_edges[:-1]) + (bin_edges[1]-bin_edges[0])/2
     norm_hist = [i/sum(hist) for i in hist]
-    ax.plot(bin_centres, norm_hist, marker='.', color='green', linewidth=4, linestyle=(0, (3, 1, 1, 1)), markersize=18)
+    ax.plot(bin_centres, norm_hist, marker='.', color='green', linewidth=4, markersize=18)

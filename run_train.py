@@ -15,7 +15,7 @@ group.add_argument('--exp_name', type=str,         help='name to save the experi
 group.add_argument('--temp', action='store_const',  const=temp_dir, dest='exp_name', help='if set, the exp_name is temp')
 
 model_parser.add_argument('--transformer',  default='electra_base', type=str,  help='[bert, roberta, electra ...]')
-model_parser.add_argument('--formatting',   default='standard',     type=str,  help='[bert, roberta, electra ...]')
+model_parser.add_argument('--formatting',   default='standard',     type=str,  help='[standard, Q, O, QO]')
 model_parser.add_argument('--max_len',      default=512,            type=int,  help='max length of transformer inputs')
 
 model_parser.add_argument('--num_seeds',  default=1,            type=int,  help='number of seeds to train')

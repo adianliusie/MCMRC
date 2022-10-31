@@ -8,8 +8,9 @@ from functools import lru_cache
 
 from .load_race import load_race
 from .load_auto_questions import load_autoq_train, load_autoq_test, load_autoq_test_filt
-from .load_alta_MCRC import load_B2_first, load_B2_first_schools
-from .load_alta_detailed import load_alta_MC4_data
+from .load_alta_b2 import load_B2_first, load_B2_first_schools
+from .load_alta_mc4 import load_alta_MC4_data
+from .load_alta_mc3 import load_alta_MC3_data
 
 from ..utils.torch_utils import load_tokenizer, load_seq2seq_tokenizer
 
@@ -28,7 +29,7 @@ class DataLoader:
                     'b2_first':load_B2_first,
                     'b2_first_school':load_B2_first_schools,
                     'alta_MC4':load_alta_MC4_data,
-                    'alta_MC3':None,
+                    'alta_MC3':load_alta_MC3_data,
                     'auto_train':load_autoq_train,
                     'auto_test':load_autoq_test,
                     'auto_test_filt':load_autoq_test_filt}

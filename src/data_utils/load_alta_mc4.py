@@ -19,11 +19,6 @@ def load_alta_MC4_data():
     data = format_csv(df)
     return None, None, data
 
-def get_q_headers(df):
-    """ gets all column headers for the question"""
-    questions = [x.replace('A','') for x in df.columns if x[0]=='Q' and x[-1]=='A']
-    return questions
-
 def format_csv(df:pd.DataFrame)->List[SimpleNamespace]:
     ans_to_id = {'A':0, 'B':1, 'C':2, 'D':3}
     q_headers = get_q_headers(df)
@@ -44,14 +39,9 @@ def format_csv(df:pd.DataFrame)->List[SimpleNamespace]:
             answer   = ans_to_id[answer]
 
             # Get candidates chosen answer distribution if valid
-            cand_dist = [row[f'{q_num}_distract_{i}_fac'] for i in ['a', 'b', 'c', 'd']]
-            if pd.isna(cand_dist[0]):
-                cand_dist = None
-            else:
-                if abs(sum(cand_dist)-1.00)<0.021 and min(cand_dist) >= 0:
-                    cand_dist = np.array(cand_dist)/np.sum(cand_dist)
-                else:
-                    cand_dist = f'invalid: sum={round(sum(cand_dist), 4)}'
+            cand_dist   = [row[f'{q_num}_distract_{i}_fac'] for i in ['a', 'b', 'c', 'd']]
+            disc_scores = [row[f'{q_num}_distract_{i}_disc'] for i in ['a', 'b', 'c', 'd']] 
+            cand_dist   = process_cand_dist(cand_dist, disc_scores)
 
             #process output type
             ex_obj = SimpleNamespace(
@@ -65,3 +55,32 @@ def format_csv(df:pd.DataFrame)->List[SimpleNamespace]:
                      )
             output.append(ex_obj)     
     return output
+
+def get_q_headers(df):
+    """ gets all column headers for the question"""
+    questions = [x.replace('A','') for x in df.columns if x[0]=='Q' and x[-1]=='A']
+    return questions
+
+def process_cand_dist(cand_dist, disc_scores):
+    #if candidate distribution not provided, return None
+    if pd.isna(cand_dist[0]):
+        return None
+    else:
+        assert min(cand_dist) >= 0
+        # if candidate distribution sum between 0.98 and 1.02, accept and normalise
+        if abs(sum(cand_dist)-1.00)<0.021:
+            output = np.array(cand_dist)/np.sum(cand_dist)
+            return output
+            
+        else:
+            #if one of the discriminative scores is 0, remove the score and see if it normalises
+            min_disc, index = min([(abs(d), k) for k, d in enumerate(disc_scores)]) 
+            if float(min_disc) == 0:
+                temp_cand_dist = cand_dist.copy()
+                temp_cand_dist[index] = 0
+                if abs(sum(temp_cand_dist)-1.00)<0.021:
+                    output = np.array(temp_cand_dist)/np.sum(temp_cand_dist)
+                    return output
+                
+    # if all fails, then note distribution is invalid, but return the og dist
+    return f'invalid dist: {cand_dist} sum={round(sum(cand_dist), 4)}'
