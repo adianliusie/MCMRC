@@ -12,18 +12,18 @@ def load_race():
     #load RACE-M and RACE-H data from hugginface
     race_m = load_dataset("race", "middle")
     race_h = load_dataset("race", "high")
-    race_c = load_race_c()
+    #race_c = load_race_c()
     
     #load and format each train, validation and test split
     SPLITS = ['train', 'validation', 'test']
     train_m, dev_m, test_m = [format_race(race_m[split], 'M') for split in SPLITS]
     train_h, dev_h, test_h = [format_race(race_h[split], 'H') for split in SPLITS]
-    train_c, dev_c, test_c = [format_race(race_c[split], 'C') for split in SPLITS]
+    #train_c, dev_c, test_c = [format_race(race_c[split], 'C') for split in SPLITS]
 
     #combine for output
-    train = train_m + train_h + train_c
-    dev   = dev_m   + dev_h   + dev_c
-    test  = test_m  + test_h  + test_c
+    train = train_m + train_h #+ train_c
+    dev   = dev_m   + dev_h   #+ dev_c
+    test  = test_m  + test_h  #+ test_c
     return train, dev, test    
 
 def format_race(data, char):
