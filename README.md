@@ -7,13 +7,15 @@ You'll need to install transformers, torch, wandb, scipy
 To train a standard Multiple Choice Reading Comprehension system, run the command
 
 ```
-python run_train.py --path 'path_to_save_model' --data-set race --formatting standard
+python run_train.py --path 'path_to_save_model' --data-set race --formatting standard --transformer electra_large
 ```
 
 - ```--formatting standard``` uses full context in training. To train with no context, use the argument ```--formatting QO```
 - ```--data-set race``` sets the dataset to be race in training. To use other datasets load your own datasets and interface the code with src/data_utils/data_loader
+- ```--transformer electra_large``` uses the electra_large as the base transformer. Can also use ```--transformer electra_base```
 - other training arguments can be modified, look into run_train.py to see what extra arguments can be used.
 
+*Note that electra-large model may need ~40Gb of memory, and may take ~10 hours to train. 
 
 ### Evaluation
 
