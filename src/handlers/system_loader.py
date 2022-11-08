@@ -5,14 +5,14 @@ import os
 from tqdm import tqdm
 from typing import List
 
-from .QA_trainer import Trainer
+from .trainer import Trainer
 from ..utils.torch_utils import no_grad
 from ..utils.dir_helper import DirHelper
-from ..data_utils.data_loader import QaDataLoader
+from ..data_utils.data_loader import DataLoader
 
 class SystemLoader(Trainer):
-    """Base loader class- the inherited class inherits
-       the Trainer so has all experiment methods"""
+    """Base System loader class to be sued for evaluation and analysis
+       the inherited class inherits the Trainer so has all training methods"""
 
     def __init__(self, exp_path:str):
         self.dir = DirHelper.load_dir(exp_path)
@@ -68,14 +68,14 @@ class SystemLoader(Trainer):
         return probabilties
     
     def load_labels(self, data_name:str, mode='test', lim=None)->dict:
-        eval_data = QaDataLoader.load_split(data_name, mode, lim)
+        eval_data = DataLoader.load_split(data_name, mode, lim)
         labels_dict = {}
         for ex in eval_data:
             labels_dict[ex.ex_id] = ex.answer
         return labels_dict
 
     def load_inputs(self, data_name:str, mode='test')->dict:
-        eval_data = QaDataLoader.load_split(data_name, mode)
+        eval_data = DataLoader.load_split(data_name, mode)
         inputs_dict = {}
         for ex in eval_data:
             inputs_dict[ex.ex_id] = ex
@@ -107,7 +107,7 @@ class EnsembleLoader(SystemLoader):
         seed_probs = [seed.load_probs(data_name, mode) for seed in self.seeds]
 
         ex_ids = seed_probs[0].keys()
-        assert all([i.keys() == conv_ids for i in seed_probs])
+        assert all([i.keys() == ex_ids for i in seed_probs])
 
         ensemble = {}
         for ex_id in ex_ids:

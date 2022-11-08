@@ -10,15 +10,14 @@ import matplotlib.pyplot as plt
 from collections import namedtuple
 from types import SimpleNamespace
 from typing import List, Tuple
-from torch.nn import DataParallel
     
-from ..data_utils.data_loader import QaDataLoader
-from ..batchers.QA_batcher import QaBatcher
+from ..data_utils.data_loader import DataLoader
+from .batcher import Batcher
 from ..utils.dir_helper import DirHelper
 from ..utils.torch_utils import no_grad, load_MC_transformer
 
 class Trainer():
-    """"base class for running basic transformer classification models"""
+    """" Base class for training standard MCRC transformer models """
     
     def __init__(self, exp_name:str, m_args:namedtuple):
         self.dir = DirHelper(exp_name)
@@ -31,18 +30,18 @@ class Trainer():
         seed = random.randint(0, 10000)
         setattr(m_args, 'seed', seed)
         random.seed(seed)
+
         self.model_args = m_args
-        self.data_loader = QaDataLoader(trans_name=m_args.transformer, 
+        self.data_loader = DataLoader(trans_name=m_args.transformer, 
                                         formatting=m_args.formatting)
-        self.batcher = QaBatcher(max_len=m_args.max_len)
+        self.batcher = Batcher(max_len=m_args.max_len)
         self.model = load_MC_transformer(system=m_args.transformer)
-        print(f'System loaded with random seed {seed}')
 
     def train(self, args:namedtuple):
         self.dir.save_args('train_args.json', args)
         if args.wandb: self.set_up_wandb(args)
  
-        train, dev, test = self.data_loader.prep_MCRC_data(args.data_set, args.lim)
+        train, dev, _ = self.data_loader.prep_MCRC_data(args.data_set, args.lim)
         optimizer = torch.optim.AdamW(self.model.parameters(), 
                                       lr=args.lr, eps=args.epsilon)
         best_epoch = (-1, 10000, 0)
@@ -79,9 +78,6 @@ class Trainer():
             if args.wandb:
                 wandb.log({'dev_loss':perf.loss, 'dev_acc':perf.acc})
 
-            #== TEST ==============================================#
-            test_perf = self.system_eval(test, epoch, mode='test')
-            
             # save performance if best dev performance 
             if perf.acc > best_epoch[2]:
                 best_epoch = (epoch, perf.loss, perf.acc)
